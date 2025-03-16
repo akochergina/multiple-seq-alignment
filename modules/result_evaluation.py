@@ -1,5 +1,7 @@
 import sys
 import os
+from Bio import pairwise2
+from Bio.Align import substitution_matrices
 
 # Add the parent directory to the path so we can import the module
 sys.path.append(os.path.abspath(os.path.join('..')))
