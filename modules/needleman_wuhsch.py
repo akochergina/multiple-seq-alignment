@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 from Bio.Align import substitution_matrices
+from itertools import product
 
 
 """ 
@@ -65,11 +66,14 @@ def cost_n_and_1_alignment(i, alignements, blosum_m: bool, gap_score, identity_s
         The score of aligning i and j.
     """
     score = 0
-    for c in alignements:
-        if c == '-':
-            score += gap_score
-        else:
-            score += cost_2_symbols_alignment(i, c, blosum_m, identity_score, substitution_score)
+    if i == '-':
+        return gap_score
+    else:
+        for c in alignements:
+            if c == '-':
+                score += gap_score
+            else:
+                score += cost_2_symbols_alignment(i, c, blosum_m, identity_score, substitution_score)
     return score / len(alignements)
 
 def cost_n_and_m_alignment(list1, list2, blosum_m=False, identity_score=1, substitution_score=-1):
@@ -198,6 +202,52 @@ def plot_nw_matrix(matrix, arrow_matrix, block1, block2):
     ax.set_title("Needleman-Wunsch Alignment Matrix with Traceback Arrows")
     plt.show()
 
+def plot_nw_matrix_3_seq(matrix, sequences):
+    '''
+    Plot the Needleman-Wunsch matrix for 3 sequences.
+
+    Parameters:
+    ----------
+    matrix : dict
+        Dictionary where keys are index tuples (i1, i2, i3) and values are DP scores.
+    sequences : list of str
+        List of 3 sequences to align.
+    '''
+    matrix_dict = matrix
+
+    sequences = [f"-{seq}" for seq in sequences]
+
+    # Dimensions of the matrix
+    max_i = max(k[0] for k in matrix_dict) + 1
+    max_j = max(k[1] for k in matrix_dict) + 1
+    max_k = max(k[2] for k in matrix_dict) + 1
+
+
+    matrix_np = np.full((max_i, max_j, max_k), np.nan)  
+    for (i, j, k), value in matrix_dict.items():
+        matrix_np[i, j, k] = value
+
+    # Plotting the matrix
+    fig, axes = plt.subplots(1, max_k, figsize=(5 * max_k, 5))
+
+    if max_k == 1:
+        axes = [axes]  
+
+    for k in range(max_k):
+        ax = axes[k]
+        sns.heatmap(matrix_np[:, :, k], annot=True, cmap="coolwarm", fmt=".1f", linewidths=0.5, ax=ax,
+                    xticklabels=list(sequences[1]), yticklabels=list(sequences[0])) 
+        
+        ax.xaxis.set_ticks_position("top") 
+        ax.xaxis.set_label_position("top")  
+        ax.set_title(f"Slice at {sequences[2][k]}", fontsize=12) 
+  
+    fig.suptitle("Needleman-Wunsch Matrix N^4", fontsize=16, fontweight="bold")
+
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.show()
+
+
 def print_alignments(alignments):
     """
     Print the aligned sequences.
@@ -287,6 +337,8 @@ def fill_needleman_wunsch_matrix(sequence, previous_alignment, blosum_m, gap_ope
     -------
     matrix : pandas.DataFrame
         The filled matrix.
+    arrow_matrix : pandas.DataFrame
+        The matrix of arrows indicating traceback paths.
     '''
     # Initialize the matrix
     rows = len(sequence) + 1
@@ -430,6 +482,109 @@ def fill_needleman_wunsch_matrix_multiple(block1, block2, blosum_m, gap_opening_
                 gap_matrix.at[i, j] = 1
 
     return matrix, arrow_matrix
+
+
+def fill_needleman_wunsch_matrix_multidim(sequences, blosum_m, gap_opening_score, gap_extension_score, identity_score=1, substitution_score=-1):
+    '''
+    Fill the Needleman-Wunsch matrix up to N^K and store the indexes of the arrows with possibility to have up to K arrows.
+
+    Parameters:
+    ----------
+    sequences : list of str
+        List of K sequences to align.
+    blosum_m : bool
+        If True, we use BLOSUM62 matrix.
+    gap_opening_score : int
+        Score for opening a gap.
+    gap_extension_score : int
+        Score for extending a gap.
+    identity_score : int
+        Score for aligning identical characters.
+    substitution_score : int
+        Score for aligning non-identical characters.
+
+    Returns:
+    -------
+    matrix : dict
+        Dictionary where keys are index tuples (i1, ..., iK) and values are DP scores.
+    arrow_matrix : dict
+        Dictionary where keys are index tuples (i1, ..., iK) and values store previous indices for traceback.
+    '''
+
+    K = len(sequences)
+
+    # Determine the matrix dimensions for each axis (N_i + 1)
+    shape = [len(seq) + 1 for seq in sequences]
+
+    # Initialize DP-matrix, traceback and gap-matrices
+    matrix = {}
+    arrow_matrix = {}
+    gap_matrix = {}
+
+    # Step 1: Initialize DP matrix (boundaries)
+    for index in product(*[range(n) for n in shape]):
+        if sum(index) == 0:
+            matrix[index] = 0
+            arrow_matrix[index] = None
+            gap_matrix[index] = 0
+        else:
+            min_gap = min(i for i in index if i > 0)
+            matrix[index] = gap_opening_score + (min_gap - 1) * gap_extension_score
+            arrow_matrix[index] = []
+            gap_matrix[index] = 1
+
+    # Step 2: Filling the DP matrix
+    for index in product(*[range(n) for n in shape]):
+        if sum(index) == 0:
+            continue  # (0,0,...,0)
+
+        best_score = float('-inf')
+        best_prev = None
+        best_gap_state = None
+
+        # We go through all possible steps (inserting gaps in different sequences)
+        for shift in product([0, -1], repeat=K):
+            if sum(shift) == 0:
+                continue  # (0,0,...,0)
+
+            prev_index = tuple(i + s for i, s in zip(index, shift))
+            if any(i < 0 for i in prev_index):
+                continue  # Ignore negative indices
+
+            # Form a list of characters to be aligned
+            aligned_chars = [
+                sequences[i][index[i] - 1] if index[i] > 0 else '-'
+                for i in range(K)
+            ]
+
+            gap_state = gap_matrix[prev_index] == 1  # Check if we are in a gap state
+            gap_penalty = gap_extension_score if gap_state else gap_opening_score
+
+            # Calculate the cost of aligning the last character
+            cost = cost_n_and_1_alignment(
+                aligned_chars[-1],  
+                aligned_chars[:-1],  
+                blosum_m,
+                gap_penalty,
+                identity_score,
+                substitution_score
+            )
+
+            score = matrix[prev_index] + cost
+
+            # Update the best score and previous index
+            if score > best_score:
+                best_score = score
+                best_prev = prev_index
+                best_gap_state = 1 if '-' in aligned_chars else 0 
+
+        # Store the best score and previous index
+        matrix[index] = best_score
+        arrow_matrix[index] = best_prev
+        gap_matrix[index] = best_gap_state
+
+    return matrix, arrow_matrix
+
 
 def needleman_wunsch_step(sequence, previous_alignment, blosum_m, gap_opening_score=-10, gap_extension_score=-2, print_result=False, identity_score=1, substitution_score=-1):
     """
