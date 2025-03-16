@@ -1,4 +1,5 @@
 import pandas
+import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
@@ -505,9 +506,10 @@ def fill_needleman_wunsch_matrix_multiple(block1, block2, blosum_m, gap_opening_
     return matrix, arrow_matrix
 
 
+
 def fill_needleman_wunsch_matrix_multidim(sequences, blosum_m, gap_opening_score, gap_extension_score, identity_score=1, substitution_score=-1):
     '''
-    Fill the Needleman-Wunsch matrix up to N^K and store the indexes of the arrows with possibility to have up to K arrows.
+    Fill the Needleman-Wunsch matrix up to N^K and store the index of the best previous step (not multiple paths).
 
     Parameters:
     ----------
@@ -529,59 +531,50 @@ def fill_needleman_wunsch_matrix_multidim(sequences, blosum_m, gap_opening_score
     matrix : dict
         Dictionary where keys are index tuples (i1, ..., iK) and values are DP scores.
     arrow_matrix : dict
-        Dictionary where keys are index tuples (i1, ..., iK) and values store previous indices for traceback.
+        Dictionary where keys are index tuples (i1, ..., iK) and values store previous index for traceback.
     '''
 
     K = len(sequences)
-
-    # Determine the matrix dimensions for each axis (N_i + 1)
     shape = [len(seq) + 1 for seq in sequences]
 
-    # Initialize DP-matrix, traceback and gap-matrices
     matrix = {}
     arrow_matrix = {}
     gap_matrix = {}
 
-    # Step 1: Initialize DP matrix (boundaries)
+    # Step 1: Initialize DP matrix
     for index in product(*[range(n) for n in shape]):
-        if sum(index) == 0:
-            matrix[index] = 0
-            arrow_matrix[index] = None
-            gap_matrix[index] = 0
-        else:
-            min_gap = min(i for i in index if i > 0)
-            matrix[index] = gap_opening_score + (min_gap - 1) * gap_extension_score
-            arrow_matrix[index] = []
-            gap_matrix[index] = 1
+        matrix[index] = 0 if sum(index) == 0 else gap_opening_score + (min(i for i in index if i > 0) - 1) * gap_extension_score
+        arrow_matrix[index] = None  # Now stores tuples instead of strings
+        gap_matrix[index] = 0 if sum(index) == 0 else 1
 
-    # Step 2: Filling the DP matrix
+    # Step 2: Fill the DP matrix
     for index in product(*[range(n) for n in shape]):
         if sum(index) == 0:
-            continue  # (0,0,...,0)
+            continue  # Skip (0,0,...,0)
 
         best_score = float('-inf')
         best_prev = None
         best_gap_state = None
 
-        # We go through all possible steps (inserting gaps in different sequences)
+        # Iterate over all possible previous states
         for shift in product([0, -1], repeat=K):
             if sum(shift) == 0:
-                continue  # (0,0,...,0)
+                continue  # Skip (0,0,...,0) move
 
             prev_index = tuple(i + s for i, s in zip(index, shift))
             if any(i < 0 for i in prev_index):
                 continue  # Ignore negative indices
 
-            # Form a list of characters to be aligned
+            # Get characters for alignment
             aligned_chars = [
                 sequences[i][index[i] - 1] if index[i] > 0 else '-'
                 for i in range(K)
             ]
 
-            gap_state = gap_matrix[prev_index] == 1  # Check if we are in a gap state
+            gap_state = gap_matrix[prev_index] == 1
             gap_penalty = gap_extension_score if gap_state else gap_opening_score
 
-            # Calculate the cost of aligning the last character
+            # Compute score
             cost = cost_n_and_1_alignment(
                 aligned_chars[-1],  
                 aligned_chars[:-1],  
@@ -593,15 +586,14 @@ def fill_needleman_wunsch_matrix_multidim(sequences, blosum_m, gap_opening_score
 
             score = matrix[prev_index] + cost
 
-            # Update the best score and previous index
-            if score > best_score:
-                best_score = score
-                best_prev = prev_index
-                best_gap_state = 1 if '-' in aligned_chars else 0 
+            
+            best_score = score
+            best_prev = prev_index
+            best_gap_state = 1 if '-' in aligned_chars else 0
 
-        # Store the best score and previous index
+        # Save the best score and single traceback path
         matrix[index] = best_score
-        arrow_matrix[index] = best_prev
+        arrow_matrix[index] = best_prev  # Now stores a tuple, not a string
         gap_matrix[index] = best_gap_state
 
     return matrix, arrow_matrix
@@ -802,8 +794,6 @@ def needleman_wunsch_multiple(block1, block2, blosum_m, gap_opening_score=-10, g
     return score, alignments
 
 
-from itertools import product
-
 def needleman_wunsch_multidim(sequences, blosum_m, gap_opening_score=-10, gap_extension_score=-2, print_result=False, identity_score=1, substitution_score=-1):
     """
     Perform Needleman-Wunsch alignment for multiple sequences using a multidimensional DP matrix.
@@ -832,6 +822,8 @@ def needleman_wunsch_multidim(sequences, blosum_m, gap_opening_score=-10, gap_ex
     alignments : list of str
         The aligned sequences.
     """
+    if len(sequences) == 2:
+        return needleman_wunsch(sequences, blosum_m, gap_opening_score, gap_extension_score, print_result, identity_score, substitution_score)
 
     # Step 1: Fill the DP matrix
     matrix, arrow_matrix = fill_needleman_wunsch_matrix_multidim(
@@ -847,7 +839,7 @@ def needleman_wunsch_multidim(sequences, blosum_m, gap_opening_score=-10, gap_ex
     aligned_sequences = [""] * K
 
     while index is not None and sum(index) > 0:
-        prev_index = arrow_matrix[index]
+        prev_index = arrow_matrix[index]  # Only one best path
 
         # Build aligned sequences
         for i in range(K):
