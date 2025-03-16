@@ -800,3 +800,71 @@ def needleman_wunsch_multiple(block1, block2, blosum_m, gap_opening_score=-10, g
         print_nw_result(matrix, arrow_matrix, score, alignments, block1, block2)
 
     return score, alignments
+
+
+from itertools import product
+
+def needleman_wunsch_multidim(sequences, blosum_m, gap_opening_score=-10, gap_extension_score=-2, print_result=False, identity_score=1, substitution_score=-1):
+    """
+    Perform Needleman-Wunsch alignment for multiple sequences using a multidimensional DP matrix.
+
+    Parameters:
+    ----------
+    sequences : list of str
+        List of K sequences to align.
+    blosum_m : bool
+        If True, use BLOSUM62 matrix.
+    gap_opening_score : int
+        Score for opening a gap.
+    gap_extension_score : int
+        Score for extending a gap.
+    print_result : bool
+        If True, print the result.
+    identity_score : int
+        Score for aligning identical characters.
+    substitution_score : int
+        Score for aligning non-identical characters.
+
+    Returns:
+    -------
+    score : int
+        The optimal alignment score.
+    alignments : list of str
+        The aligned sequences.
+    """
+
+    # Step 1: Fill the DP matrix
+    matrix, arrow_matrix = fill_needleman_wunsch_matrix_multidim(
+        sequences, blosum_m, gap_opening_score, gap_extension_score, identity_score, substitution_score
+    )
+
+    # Step 2: Backtracking to reconstruct the alignment
+    K = len(sequences)
+    shape = [len(seq) for seq in sequences]
+    index = tuple(n for n in shape)  # Start at the bottom-right corner
+
+    score = matrix[index]
+    aligned_sequences = [""] * K
+
+    while index is not None and sum(index) > 0:
+        prev_index = arrow_matrix[index]
+
+        # Build aligned sequences
+        for i in range(K):
+            if prev_index and prev_index[i] == index[i] - 1:
+                aligned_sequences[i] = sequences[i][index[i] - 1] + aligned_sequences[i]
+            else:
+                aligned_sequences[i] = "-" + aligned_sequences[i]
+
+        index = prev_index  # Move to the previous index
+
+    # Step 3: Print the results if needed
+    if print_result:
+        if K == 2:
+            print_nw_result(matrix, arrow_matrix, score, aligned_sequences, sequences[0], sequences[1:])
+        elif K == 3:
+            print_nw_result_multidim_3_seq(matrix, sequences, score, aligned_sequences)
+        else:
+            print_nw_result_multidim_N_seq(score, aligned_sequences)
+
+    return score, aligned_sequences
