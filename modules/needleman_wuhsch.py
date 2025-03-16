@@ -263,7 +263,7 @@ def print_alignments(alignments):
     return
 
     
-def print_nw_result_3_seq(matrix, sequences, score, alignments):
+def print_nw_result_multidim_3_seq(matrix, sequences, score, alignments):
     '''
     Print the Needleman-Wunsch result for multidimensional case with 3 sequences.
 
@@ -282,6 +282,27 @@ def print_nw_result_3_seq(matrix, sequences, score, alignments):
     print_alignments(alignments)
     plot_nw_matrix_3_seq(matrix, sequences)
     return
+
+
+def print_nw_result_multidim_N_seq(score, alignments):
+    '''
+    Print the Needleman-Wunsch result for multidimensional case with 3 sequences.
+
+    Parameters:
+    ----------
+    matrix : pandas.DataFrame
+        The filled matrix.
+    sequences : list of str
+        List of 3 sequences to align.
+    score : int
+        The score of the alignment.
+    alignments : list of str
+        The aligned sequences.
+    '''
+    print(f"Alignment was made with Multidimensional Needleman-Wunsch algorithm. Score is {score}.")
+    print_alignments(alignments)
+    return
+
 
 def print_nw_result(matrix, arrow_matrix, score, alignments, block1, block2):
     '''
