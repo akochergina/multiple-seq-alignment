@@ -94,13 +94,6 @@ def compute_carillo_lipman_bounds(sequences, blosum_m, print_results=True, gap_o
         pairwise_bounds[i].append((min_i, max_i))
         pairwise_bounds[j].append((min_j, max_j))
 
-        print_alignments(aligned)
-        print(f"Sequence {i}: {min_i} - {max_i}")
-        print(f"Sequence {j}: {min_j} - {max_j}")
-        print()
-
-            
-
     # 2. Compute global bounds for each sequence
     bounds = []
     for i in range(K):
