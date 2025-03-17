@@ -273,16 +273,14 @@ def fill_needleman_wunsch_matrix_multidim(sequences, blosum_m, gap_opening_score
         arrow_matrix[index] = best_prev
         gap_matrix[index] = best_gap_state
         
-        print(f"Index: {index}, Scores: {score_dict}, Best: {best_prev} -> {best_score}")
-
-    print(f"Total computed cells: {len(matrix)} out of {np.prod(shape)} possible")
+        # print(f"Index: {index}, Scores: {score_dict}, Best: {best_prev} -> {best_score}")
 
     return matrix, arrow_matrix
 
 
 def fill_needleman_wunsch_matrix_multidim_carillo(sequences, blosum_m, gap_opening_score, gap_extension_score, identity_score=1, substitution_score=-1):
     """
-    Fill the Needleman-Wunsch matrix using Carillo-Lipman bounds.
+    Fill the Needleman-Wunsch matrix using Carillo-Lipman bounds and measure efficiency.
 
     Parameters:
     ----------
@@ -311,88 +309,123 @@ def fill_needleman_wunsch_matrix_multidim_carillo(sequences, blosum_m, gap_openi
     shape = [len(seq) + 1 for seq in sequences]
 
     # Compute Carillo-Lipman bounds
-
     bounds = compute_carillo_lipman_bounds(sequences, blosum_m, True, gap_opening_score, gap_extension_score, identity_score, substitution_score)
+
+    # Compute max possible gaps for each sequence (before the last letter!)
+    max_gap_seq = tuple(bounds[i][1] - len(sequences[i]) for i in range(K))
+
+    valid_moves = False
 
     matrix = {}
     arrow_matrix = {}
     gap_matrix = {}
-    alignment_lengths = {}
+    available_gaps = {}  # Dict to track remaining gaps for each sequence
+
+    # Анализ Carillo-Lipman: считаем заполненные и пропущенные ячейки
+    total_possible_cells = np.prod(shape)  # Максимально возможное количество ячеек
+    filled_cells = 0  # Заполненные ячейки
+    skipped_cells = 0  # Пропущенные ячейки (Carillo-Lipman)
 
     # Step 1: Initialize DP matrix within bounds
     for index in product(*[range(n) for n in shape]):
-        matrix[index] = 0 if sum(index) == 0 else gap_opening_score + (min(i for i in index if i > 0) - 1) * gap_extension_score
+        if any(index[i] < bounds[i][0] or index[i] > bounds[i][1] for i in range(K)):
+            skipped_cells += 1
+            continue 
+
+        filled_cells += 1
+        matrix[index] = 0 if sum(index) == 0 else sum(gap_opening_score + (i - 1) * gap_extension_score for i in index if i > 0)
         arrow_matrix[index] = None
         gap_matrix[index] = 0 if sum(index) == 0 else 1
-        alignment_lengths[index] = tuple(0 for _ in range(K))
-    
-    print(alignment_lengths)
-
+        available_gaps[index] = max_gap_seq  # Initialize available gaps for each index
 
     # Step 2: Fill DP matrix within bounds
     for index in product(*[range(n) for n in shape]):
         if sum(index) == 0:
+            continue
+
+        if any(index[i] < bounds[i][0] or index[i] > bounds[i][1] for i in range(K)):
             continue  
 
-        best_score = float('-inf')
-        best_prev = None
-        best_gap_state = None
-        best_alignment_length = None
+        score_dict = {}  # Store scores for each possible previous index
+        best_prev, best_score, best_gap_state = None, float('-inf'), None
+        best_gaps = None  # Track best available gaps
 
         for shift in product([0, -1], repeat=K):
             if sum(shift) == 0:
                 continue  
 
             prev_index = tuple(i + s for i, s in zip(index, shift))
-            if any(i < 0 for i in prev_index) or any(not (bounds[i][0] <= prev_index[i] <= bounds[i][1]) for i in range(K)):
+
+            if any(prev_index[i] < bounds[i][0] or prev_index[i] > bounds[i][1] for i in range(K)):
+                continue
+
+            if any(i < 0 for i in prev_index):
                 continue  
-
-            prev_length = alignment_lengths[prev_index]  # Get previous alignment length
-            new_length = list(prev_length)
-
-            # Update alignment length based on the move
+            
+            # Проверяем, не станет ли `available_gaps` отрицательным
+            new_gaps = list(available_gaps.get(prev_index, max_gap_seq))
             for i in range(K):
-                if prev_index[i] < index[i]:  # If we moved in this dimension, increase length
-                    new_length[i] += 1
+                if prev_index[i] == index[i] and index[i] < len(sequences[i]):  
+                    new_gaps[i] -= 1
 
-            new_length = tuple(new_length)
+            if any(gap < 0 for gap in new_gaps):
+                continue  # Если хотя бы один гэп < 0, этот путь невозможен
 
-            # If new alignment length exceeds the bounds, skip this move
-            if any(new_length[i] > bounds[i][1] for i in range(K)):
-                continue  
+            valid_moves = True  # Нашли хотя бы один допустимый `prev_index`
+            new_gaps = tuple(new_gaps)
 
-            aligned_chars = [
-                sequences[i][index[i] - 1] if index[i] > 0 else '-'
-                for i in range(K)
-            ]
+            aligned_chars = []
+            for i in range(K):
+                if prev_index[i] == index[i]:  
+                    aligned_chars.append('-')
+                else:
+                    aligned_chars.append(sequences[i][index[i] - 1])
 
-            gap_state = gap_matrix[prev_index] == 1
+            gap_state = gap_matrix.get(prev_index, 0) == 1
             gap_penalty = gap_extension_score if gap_state else gap_opening_score
 
-            cost = cost_n_and_1_alignment(
-                aligned_chars[-1],  
-                aligned_chars[:-1],  
+            cost = cost_n_symbols_alignment(
+                aligned_chars,  
                 blosum_m,
                 gap_penalty,
                 identity_score,
                 substitution_score
             )
 
-            score = matrix[prev_index] + cost
+            score = matrix.get(prev_index, float('-inf')) + cost
+            score_dict[prev_index] = score 
 
-            best_score = score
-            best_prev = prev_index
-            best_gap_state = 1 if '-' in aligned_chars else 0
-            best_alignment_length = new_length
+            # Update available gaps
+            new_gaps = list(available_gaps.get(prev_index, max_gap_seq))
+            for i in range(K):
+                if prev_index[i] == index[i] and index[i] < len(sequences[i]):  
+                    new_gaps[i] -= 1
+            new_gaps = tuple(new_gaps) 
 
-        matrix[index] = best_score
-        arrow_matrix[index] = best_prev
-        gap_matrix[index] = best_gap_state
-        alignment_lengths[index] = best_alignment_length
-        print(index, best_alignment_length)
+            if score > best_score:
+                best_prev, best_score = prev_index, score
+                best_gap_state = 1 if '-' in aligned_chars else 0
+                best_gaps = new_gaps
+        
+        if not valid_moves:
+            matrix[index] = float('-inf')
+            arrow_matrix[index] = None
+            available_gaps[index] = max_gap_seq
+            skipped_cells += 1
+        else:
+            matrix[index] = best_score
+            arrow_matrix[index] = best_prev
+            gap_matrix[index] = best_gap_state
+            available_gaps[index] = best_gaps if best_gaps else max_gap_seq  # Store updated gap info
 
 
-    print(f"Total computed cells: {len(matrix)} out of {np.prod(shape)} possible")
+
+    # Results Carillo-Lipman
+    print()
+    efficiency = (skipped_cells) / total_possible_cells if total_possible_cells > 0 else 0
+    print(f"Total possible cells: {total_possible_cells}")
+    print(f"Skipped cells due to Carillo-Lipman bounds: {skipped_cells}")
+    print(f"Efficiency of Carillo-Lipman bounds: {efficiency:.2%}")
 
     return matrix, arrow_matrix
 
