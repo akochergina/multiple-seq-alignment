@@ -371,7 +371,7 @@ def fill_needleman_wunsch_matrix_multidim_carillo(sequences, blosum_m, gap_openi
             if any(gap < 0 for gap in new_gaps):
                 continue  # Если хотя бы один гэп < 0, этот путь невозможен
 
-            valid_moves = True  # Нашли хотя бы один допустимый `prev_index`
+            valid_moves = True 
             new_gaps = tuple(new_gaps)
 
             aligned_chars = []
