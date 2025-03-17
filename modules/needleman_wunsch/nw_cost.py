@@ -110,3 +110,43 @@ def cost_n_and_m_alignment(list1, list2, blosum_m=False, identity_score=1, subst
                 else:
                     score+= substitution_score
     return score/(n*m)
+
+def cost_n_symbols_alignment(symbols, blosum_m: bool, gap_penalty, identity_score=1, substitution_score=-1):
+    """
+    Computes the cost of aligning a set of symbols (of dimension K) in the multidimensional Niedelman-Wunsch algorithm.
+
+    Parameters:
+    ----------
+    symbols : list of str
+        List of characters that are aligned at the same time (например, ['A', 'G', 'A'] или ['C', '-', 'T']).
+    blosum_m : bool
+        If True, then the BLOSUM62 matrix is used to calculate the score.
+    gap_penalty : int
+    identity_score : int
+    substitution_score : int
+
+    Returns:
+    -------
+    score : int
+        Cost of aligning the symbols.
+    """
+    if '-' in symbols:
+        return gap_penalty
+
+    if blosum_m:
+        matrix = substitution_matrices.load("BLOSUM62")
+        score = 0
+        for i in range(len(symbols)):
+            for j in range(i + 1, len(symbols)):  # Take only unique pairs
+                score += int(matrix[(symbols[i], symbols[j])])
+        return score / (len(symbols) * (len(symbols) - 1) / 2)  # Mean score of pairs
+
+    score = 0
+    for i in range(len(symbols)):
+        for j in range(i + 1, len(symbols)):
+            if symbols[i] == symbols[j]:
+                score += identity_score
+            else:
+                score += substitution_score
+
+    return score / (len(symbols) * (len(symbols) - 1) / 2) 
