@@ -9,6 +9,7 @@ sys.path.append(os.path.abspath(os.path.join('..')))
 
 from modules.needleman_wunsch.nw_cost import *
 from modules.needleman_wunsch.nw_visualization import *
+from modules.carillo_lipman_bounds import *
 
 """
 Needleman-Wunsch functions.
@@ -185,8 +186,6 @@ def fill_needleman_wunsch_matrix_multiple(block1, block2, blosum_m, gap_opening_
 
     return matrix, arrow_matrix
 
-
-
 def fill_needleman_wunsch_matrix_multidim(sequences, blosum_m, gap_opening_score, gap_extension_score, identity_score=1, substitution_score=-1):
     '''
     Fill the Needleman-Wunsch matrix up to N^K and store the index of the best previous step (not multiple paths).
@@ -213,7 +212,6 @@ def fill_needleman_wunsch_matrix_multidim(sequences, blosum_m, gap_opening_score
     arrow_matrix : dict
         Dictionary where keys are index tuples (i1, ..., iK) and values store previous index for traceback.
     '''
-
     K = len(sequences)
     shape = [len(seq) + 1 for seq in sequences]
 
@@ -221,31 +219,148 @@ def fill_needleman_wunsch_matrix_multidim(sequences, blosum_m, gap_opening_score
     arrow_matrix = {}
     gap_matrix = {}
 
-    # Step 1: Initialize DP matrix
+    # Step 1: Initialize DP matrix within bounds
     for index in product(*[range(n) for n in shape]):
-        matrix[index] = 0 if sum(index) == 0 else gap_opening_score + (min(i for i in index if i > 0) - 1) * gap_extension_score
-        arrow_matrix[index] = None  # Now stores tuples instead of strings
+        matrix[index] = 0 if sum(index) == 0 else sum(gap_opening_score + (i - 1) * gap_extension_score for i in index if i > 0)
+        arrow_matrix[index] = None
         gap_matrix[index] = 0 if sum(index) == 0 else 1
-
-    # Step 2: Fill the DP matrix
+    
+    # Step 2: Fill DP matrix within bounds
     for index in product(*[range(n) for n in shape]):
         if sum(index) == 0:
-            continue  # Skip (0,0,...,0)
+            continue  
+
+        score_dict = {}  # Store scores for each possible previous index
+        best_prev, best_score, best_gap_state = None, float('-inf'), None
+        
+        for shift in product([0, -1], repeat=K):
+            if sum(shift) == 0:
+                continue  
+
+            prev_index = tuple(i + s for i, s in zip(index, shift))
+            if any(i < 0 for i in prev_index):
+                continue   # Skip if out of bounds
+
+            aligned_chars = []
+            for i in range(K):
+                if prev_index[i] == index[i]:  # Если индекс не изменился, значит, тут разрыв
+                    aligned_chars.append('-')
+                else:
+                    aligned_chars.append(sequences[i][index[i] - 1])
+
+            gap_state = gap_matrix[prev_index] == 1
+            gap_penalty = gap_extension_score if gap_state else gap_opening_score
+
+            cost = cost_n_symbols_alignment(
+                aligned_chars,  
+                blosum_m,
+                gap_penalty,
+                identity_score,
+                substitution_score
+            )
+        
+
+            score = matrix[prev_index] + cost
+            score_dict[prev_index] = score  # Store computed score
+
+
+            if score > best_score:
+                best_prev, best_score = prev_index, score
+                best_gap_state = 1 if '-' in aligned_chars else 0
+    
+
+        matrix[index] = best_score
+        arrow_matrix[index] = best_prev
+        gap_matrix[index] = best_gap_state
+        
+        print(f"Index: {index}, Scores: {score_dict}, Best: {best_prev} -> {best_score}")
+
+    print(f"Total computed cells: {len(matrix)} out of {np.prod(shape)} possible")
+
+    return matrix, arrow_matrix
+
+
+def fill_needleman_wunsch_matrix_multidim_carillo(sequences, blosum_m, gap_opening_score, gap_extension_score, identity_score=1, substitution_score=-1):
+    """
+    Fill the Needleman-Wunsch matrix using Carillo-Lipman bounds.
+
+    Parameters:
+    ----------
+    sequences : list of str
+        List of K sequences to align.
+    blosum_m : bool
+        If True, we use BLOSUM62 matrix.
+    gap_opening_score : int
+        Score for opening a gap.
+    gap_extension_score : int
+        Score for extending a gap.
+    identity_score : int
+        Score for aligning identical characters.
+    substitution_score : int
+        Score for aligning non-identical characters.
+
+    Returns:
+    -------
+    matrix : dict
+        Dictionary where keys are index tuples (i1, ..., iK) and values are DP scores.
+    arrow_matrix : dict
+        Dictionary where keys are index tuples (i1, ..., iK) and values store previous index for traceback.
+    """
+
+    K = len(sequences)
+    shape = [len(seq) + 1 for seq in sequences]
+
+    # Compute Carillo-Lipman bounds
+
+    bounds = compute_carillo_lipman_bounds(sequences, blosum_m, True, gap_opening_score, gap_extension_score, identity_score, substitution_score)
+
+    matrix = {}
+    arrow_matrix = {}
+    gap_matrix = {}
+    alignment_lengths = {}
+
+    # Step 1: Initialize DP matrix within bounds
+    for index in product(*[range(n) for n in shape]):
+        matrix[index] = 0 if sum(index) == 0 else gap_opening_score + (min(i for i in index if i > 0) - 1) * gap_extension_score
+        arrow_matrix[index] = None
+        gap_matrix[index] = 0 if sum(index) == 0 else 1
+        alignment_lengths[index] = tuple(0 for _ in range(K))
+    
+    print(alignment_lengths)
+
+
+    # Step 2: Fill DP matrix within bounds
+    for index in product(*[range(n) for n in shape]):
+        if sum(index) == 0:
+            continue  
 
         best_score = float('-inf')
         best_prev = None
         best_gap_state = None
+        best_alignment_length = None
 
-        # Iterate over all possible previous states
         for shift in product([0, -1], repeat=K):
             if sum(shift) == 0:
-                continue  # Skip (0,0,...,0) move
+                continue  
 
             prev_index = tuple(i + s for i, s in zip(index, shift))
-            if any(i < 0 for i in prev_index):
-                continue  # Ignore negative indices
+            if any(i < 0 for i in prev_index) or any(not (bounds[i][0] <= prev_index[i] <= bounds[i][1]) for i in range(K)):
+                continue  
 
-            # Get characters for alignment
+            prev_length = alignment_lengths[prev_index]  # Get previous alignment length
+            new_length = list(prev_length)
+
+            # Update alignment length based on the move
+            for i in range(K):
+                if prev_index[i] < index[i]:  # If we moved in this dimension, increase length
+                    new_length[i] += 1
+
+            new_length = tuple(new_length)
+
+            # If new alignment length exceeds the bounds, skip this move
+            if any(new_length[i] > bounds[i][1] for i in range(K)):
+                continue  
+
             aligned_chars = [
                 sequences[i][index[i] - 1] if index[i] > 0 else '-'
                 for i in range(K)
@@ -254,7 +369,6 @@ def fill_needleman_wunsch_matrix_multidim(sequences, blosum_m, gap_opening_score
             gap_state = gap_matrix[prev_index] == 1
             gap_penalty = gap_extension_score if gap_state else gap_opening_score
 
-            # Compute score
             cost = cost_n_and_1_alignment(
                 aligned_chars[-1],  
                 aligned_chars[:-1],  
@@ -266,15 +380,19 @@ def fill_needleman_wunsch_matrix_multidim(sequences, blosum_m, gap_opening_score
 
             score = matrix[prev_index] + cost
 
-            
             best_score = score
             best_prev = prev_index
             best_gap_state = 1 if '-' in aligned_chars else 0
+            best_alignment_length = new_length
 
-        # Save the best score and single traceback path
         matrix[index] = best_score
-        arrow_matrix[index] = best_prev  # Now stores a tuple, not a string
+        arrow_matrix[index] = best_prev
         gap_matrix[index] = best_gap_state
+        alignment_lengths[index] = best_alignment_length
+        print(index, best_alignment_length)
+
+
+    print(f"Total computed cells: {len(matrix)} out of {np.prod(shape)} possible")
 
     return matrix, arrow_matrix
 
@@ -474,7 +592,7 @@ def needleman_wunsch_multiple(block1, block2, blosum_m, gap_opening_score=-10, g
     return score, alignments
 
 
-def needleman_wunsch_multidim(sequences, blosum_m, gap_opening_score=-10, gap_extension_score=-2, print_result=False, identity_score=1, substitution_score=-1):
+def needleman_wunsch_multidim(sequences, blosum_m, carillo, gap_opening_score=-10, gap_extension_score=-2, print_result=False, identity_score=1, substitution_score=-1):
     """
     Perform Needleman-Wunsch alignment for multiple sequences using a multidimensional DP matrix.
 
@@ -484,6 +602,8 @@ def needleman_wunsch_multidim(sequences, blosum_m, gap_opening_score=-10, gap_ex
         List of K sequences to align.
     blosum_m : bool
         If True, use BLOSUM62 matrix.
+    carillo : bool
+        If True, use Carillo-Lipman bounds.
     gap_opening_score : int
         Score for opening a gap.
     gap_extension_score : int
@@ -506,14 +626,20 @@ def needleman_wunsch_multidim(sequences, blosum_m, gap_opening_score=-10, gap_ex
         return needleman_wunsch(sequences, blosum_m, gap_opening_score, gap_extension_score, print_result, identity_score, substitution_score)
 
     # Step 1: Fill the DP matrix
-    matrix, arrow_matrix = fill_needleman_wunsch_matrix_multidim(
-        sequences, blosum_m, gap_opening_score, gap_extension_score, identity_score, substitution_score
-    )
+    if carillo:
+        matrix, arrow_matrix = fill_needleman_wunsch_matrix_multidim_carillo(
+            sequences, blosum_m, gap_opening_score, gap_extension_score, identity_score, substitution_score
+        )
+    else:
+        matrix, arrow_matrix = fill_needleman_wunsch_matrix_multidim(
+            sequences, blosum_m, gap_opening_score, gap_extension_score, identity_score, substitution_score
+        )
 
     # Step 2: Backtracking to reconstruct the alignment
     K = len(sequences)
     shape = [len(seq) for seq in sequences]
     index = tuple(n for n in shape)  # Start at the bottom-right corner
+
 
     score = matrix[index]
     aligned_sequences = [""] * K
