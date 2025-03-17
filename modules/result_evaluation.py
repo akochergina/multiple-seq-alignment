@@ -2,6 +2,7 @@ import sys
 import os
 from Bio import pairwise2
 from Bio.Align import substitution_matrices
+from itertools import permutations
 
 # Add the parent directory to the path so we can import the module
 sys.path.append(os.path.abspath(os.path.join('..')))
@@ -96,3 +97,50 @@ def test_biopython_vs_custom(seq1, seq2, blossum=True, gap_open_penalty=-10, gap
     custom_result = (score, alignment[0], alignment[1])
     result_biopython = (alignments_biopython[0][2], alignments_biopython[0][0], alignments_biopython[0][1])
     alignment_result_comparison(custom_result, result_biopython)
+
+
+def alignment_result_comparison_3seq(result1, result2):
+    """ 
+    Compare two alignment results for three sequences, considering all sequence order variations.
+    
+    Parameters:
+    ----------
+    result1 : tuple (float, list of str)
+        Custom Needleman-Wunsch alignment result in the form (score, alignment1, alignment2, alignment3).
+    result2 : tuple (float, list of str)
+        Another Needleman-Wunsch alignment result in the same format.
+    
+    Prints:
+    ------
+    - Whether the scores match.
+    - The highest similarity between alignments using the sum-of-pairs (SP) score.
+    """
+
+    score1, alignment1_1, alignment1_2, alignment1_3 = result1
+    score2, alignment2_1, alignment2_2, alignment2_3 = result2
+
+    print(f"Custom Needleman-Wunsch Score: {score1}")
+    print(f"Biopython Needleman-Wunsch Score: {score2}")
+
+    if score1 == score2:
+        print("✅ The alignment scores match!")
+    else:
+        print("❌ The alignment scores differ.")
+
+    # Generate all permutations of alignments for comparison
+    custom_alignments = [alignment1_1, alignment1_2, alignment1_3]
+    other_alignments = [alignment2_1, alignment2_2, alignment2_3]
+
+    max_sp_similarity = max(
+        sp_score(custom_alignments, list(permuted_alignments))
+        for permuted_alignments in permutations(other_alignments)
+    )
+
+    print(f"SP Similarity Score: {max_sp_similarity:.4f}")
+
+    if max_sp_similarity == 1.0:
+        print("✅ Alignments are identical.")
+    elif max_sp_similarity > 0.8:
+        print("⚠️ Alignments are highly similar but not identical.")
+    else:
+        print("❌ Alignments differ significantly.")
