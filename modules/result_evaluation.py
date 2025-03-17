@@ -6,7 +6,9 @@ from Bio.Align import substitution_matrices
 # Add the parent directory to the path so we can import the module
 sys.path.append(os.path.abspath(os.path.join('..')))
 
-from modules.needleman_wuhsch import *
+from modules.needleman_wunsch.nw_core import *
+from modules.needleman_wunsch.nw_visualization import *
+
 
 
 def sp_score(alignment1, alignment2):
