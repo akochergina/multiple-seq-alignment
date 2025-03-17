@@ -7,6 +7,7 @@ import os
 sys.path.append(os.path.abspath(os.path.join('..')))
 
 from modules.needleman_wunsch.nw_core import *
+from modules.needleman_wunsch.nw_visualization import *
 
 def seq_min_max(sequence):
     """
@@ -92,6 +93,12 @@ def compute_carillo_lipman_bounds(sequences, blosum_m, print_results=True, gap_o
 
         pairwise_bounds[i].append((min_i, max_i))
         pairwise_bounds[j].append((min_j, max_j))
+
+        print_alignments(aligned)
+        print(f"Sequence {i}: {min_i} - {max_i}")
+        print(f"Sequence {j}: {min_j} - {max_j}")
+        print()
+
             
 
     # 2. Compute global bounds for each sequence
@@ -100,6 +107,8 @@ def compute_carillo_lipman_bounds(sequences, blosum_m, print_results=True, gap_o
         min_bound = min(b[0] for b in pairwise_bounds[i])
         max_bound = max(b[1] for b in pairwise_bounds[i])
         bounds.append((min_bound, max_bound))
+    
+    bounds = [(min_bound, max_bound + 1) for min_bound, max_bound in bounds]
 
     if print_results:
         print_carillo_lipman_bounds(bounds, sequences)
