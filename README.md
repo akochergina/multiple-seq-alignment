@@ -13,6 +13,42 @@ Despite algorithmic improvements, **exact multidimensional alignment remains com
 
 ---
 
+## 📂 Project Structure
+```
+/project_root/
+    ├── balibase/                       # Real data from BALIBASE for testing 
+    ├── modules/                        # Python modules with isolated functions
+    │   ├── needleman_wunsch/           # Needleman-Wunsch functions
+    │   │   ├── nw_core.py              # Core Needleman-Wunsch implementations
+    │   │   ├── nw_cost.py              # Cost functions for Needleman-Wunsch algorithm
+    │   │   ├── nw_visualization.py     # Visualization of matrices and alignment results
+    │   ├── carillo_lipman_bounds.py    # Carrillo-Lipman bounds for optimization
+    │   ├── result_evaluation.py        # Functions to compare different alignments 
+    ├── notebooks/ 
+    │   ├── using_example.ipynb         # Example Jupyter Notebook demonstrating key functions
+    ├── README.md                       # Project documentation
+```
+
+---
+
+## 🚀 Installation
+Clone the repository and install dependencies:
+```bash
+git clone https://github.com/akochergina/multiple-seq-alignment.git
+cd multiple-seq-alignment
+```
+
+---
+
+## ⚙️ Usage
+To explore the implemented methods and their applications, run the Jupyter Notebook located in the `notebooks/` directory:
+```bash
+jupyter notebook notebooks/using_example.ipynb
+```
+This notebook provides a **step-by-step demonstration** of the implemented functions.
+
+---
+
 ## ⚙️ Alignment Principles
 
 All algorithms implemented in this project share the same biological alignment logic:
@@ -94,39 +130,3 @@ Despite various optimizations, the implemented algorithms have several inherent 
 - **No parallelization**: Current implementation runs on a single CPU thread and is not optimized for performance on large datasets.
 
 These limitations highlight the challenges of exact MSA methods and motivate the use of heuristics in practical applications.
-
----
-
-## 📂 Project Structure
-```
-/project_root/
-    ├── balibase/                       # Real data from BALIBASE for testing 
-    ├── modules/                        # Python modules with isolated functions
-    │   ├── needleman_wunsch/           # Needleman-Wunsch functions
-    │   │   ├── nw_core.py              # Core Needleman-Wunsch implementations
-    │   │   ├── nw_cost.py              # Cost functions for Needleman-Wunsch algorithm
-    │   │   ├── nw_visualization.py     # Visualization of matrices and alignment results
-    │   ├── carillo_lipman_bounds.py    # Carrillo-Lipman bounds for optimization
-    │   ├── result_evaluation.py        # Functions to compare different alignments 
-    ├── notebooks/ 
-    │   ├── using_example.ipynb         # Example Jupyter Notebook demonstrating key functions
-    ├── README.md                       # Project documentation
-```
-
----
-
-## 🚀 Installation
-Clone the repository and install dependencies:
-```bash
-git clone https://github.com/akochergina/multiple-seq-alignment.git
-cd multiple-seq-alignment
-```
-
----
-
-## ⚙️ Usage
-To explore the implemented methods and their applications, run the Jupyter Notebook located in the `notebooks/` directory:
-```bash
-jupyter notebook notebooks/using_example.ipynb
-```
-This notebook provides a **step-by-step demonstration** of the implemented functions.
